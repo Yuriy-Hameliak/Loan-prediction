@@ -1,0 +1,977 @@
+---
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+### Kornetskyi Yaroslav, Hameliak Yuriy, Marharyta Bilyk
+
+# Loan prediction
+
+## Research Aim
+
+The aim of this research is to explore the factors that influence loan
+approval in a dataset. The study will primarily focus on variables like
+Credit History, Income, Marital Status, and Education and their
+potential impact on the likelihood of loan approval. The research also
+tests various hypotheses using statistical techniques such as logistic
+regression, Chi-square tests, and Kolmogorov-Smirnov tests.
+
+## Descriptive Analysis
+
+**Key Variables**:
+
+1.  `Gender` (Categorical: Male $82.08$%, Female $17.92$%)
+
+-   Indicates the gender of the applicant.
+
+2.  `Married` (Categorical: TRUE $64.79$%, FALSE $35.21$%)
+
+-   Indicates whether the applicant is married.
+
+3.  `Dependents` (Categorical: 1, 2, 3+)
+
+-   Indicates the number of dependents (1, 2, or 3+).
+
+4.  `Education` (Categorical: TRUE $79.79$%, FALSE $20.21$%)
+
+-   Indicates whether the applicant is a graduate or not.
+
+5.  `Self_Employed` (Categorical: TRUE $13.75$%, FALSE $86.25$%)
+
+-   Indicates whether the applicant is self-employed.
+
+6.  `ApplicantIncome` (Continuous)
+
+-   The income of the applicant.
+
+7.  `CoapplicantIncome` (Continuous)
+
+-   The income of the coapplicant.
+
+8.  `LoanAmount` (Continuous)
+
+-   The loan amount requested by the applicant.
+
+9.  `Loan_Amount_Term` (Continuous)
+
+-   The term of the loan in months.
+
+10. `Credit_History` (Categorical: TRUE $85.42$%, FALSE $14.58$%)
+
+-   Indicates whether the applicant has a credit history.
+
+11. `Property_Area` (Categorical: Semi-urban, Rural, Urban)
+
+-   The type of property area (semi-urban $39.79$%, rural $28.96$%,
+    urban $31.25$%).
+
+12. `Loan_Status` (Categorical: TRUE $69.17$%, FALSE $30.83$%)
+
+-   Whether the loan was approved (TRUE) or not (FALSE).
+
+## Cleaning and Data Preparation
+
+```{r}
+data <- read.csv("loan_prediction.csv", stringsAsFactors = FALSE)
+
+data[data == ""] <- NA
+data <- na.omit(data)
+
+rownames(data) <- data$Loan_ID
+data$Loan_ID <- NULL
+data$Self_Employed <- data$Self_Employed == "Yes"
+data$Loan_Status <- data$Loan_Status == "Y"
+data$Married <- data$Married == "Yes"
+data$Education <- data$Education == "Graduate"
+data$Credit_History <- data$Credit_History == 1
+
+data$Gender <- as.factor(data$Gender)
+data$Married <- as.factor(data$Married)
+data$Education <- as.factor(data$Education)
+data$Self_Employed <- as.factor(data$Self_Employed)
+data$Credit_History <- as.factor(data$Credit_History)
+data$Property_Area <- as.factor(data$Property_Area)
+data$Loan_Status <- as.factor(data$Loan_Status)
+data$Dependents <- as.factor(data$Dependents)
+
+
+head(data, 10)
+```
+
+```{r}
+categorical_columns <- c("Gender", "Married", "Education", 
+                         "Self_Employed", "Credit_History", 
+                         "Property_Area", "Loan_Status", "Dependents")
+data[categorical_columns] <- lapply(data[categorical_columns], as.factor)
+
+categorical_distributions <- lapply(data[categorical_columns], function(col) {
+  prop.table(table(col)) * 100
+})
+categorical_distributions
+```
+
+## Formulating Assumptions
+
+### For both testing and visual approval:
+
+1.  The expected income for male applicants is less than or equal to
+    6000;
+2.  `ApplicantIncome` is a significant factor in the likelihood of loan
+    approval;
+3.  `MaritalStatus` is a significant factor in the likelihood of loan
+    approval;
+4.  `ApplicantIncome` Distribution is approx. Normal;
+
+### For visual approval only:
+
+4.  `LoanAmount` is a significant factor in the likelihood of loan
+    approval;
+5.  `CreditHistory` is a significant factor in the likelihood of loan
+    approval;
+
+### General assumption
+
+Loan approval can be predicted in general by using information from
+$1-11$ variables, and we will use them in our custom Naive Bayes
+classifier and in built-in classifier. Also we will explain the results
+and accuracy of those two :)
+
+## Testing Assumptions
+
+### Step 1: Hypothesis 1 - `The expected income for male applicants is less than or equal to 6000`
+
+To test this hypothesis, we use a one-sample t-test, which compares the
+sample mean to a specified value 6000. The test statistic is calculated
+using the formula:
+
+$$t=\frac{\bar{x}−μ}{s/\sqrt{n}}$$
+
+Where:
+
+-   $\bar{x}$: Sample mean
+
+-   $\mu$: Population mean (hypothesized mean, 6000 here)
+
+-   s: Sample standard deviation
+
+-   n: Sample size
+
+**Degrees of freedom (df):**
+
+$$df=n-1$$
+
+To calculate the **p-value**, use the cumulative distribution function
+(CDF) of the t-distribution:
+
+-   For a one-tailed test (greater than $\mu$):
+
+    $$p=1−P(T≤t)$$
+
+We use a one-tailed t-test with the alternative "greater" to determine
+whether there is enough evidence to reject $H_0$​. If the p-value is less
+than 0.05, we reject $H_0$; otherwise, we fail to reject $H_0$.
+
+```{r}
+male_income <- data$ApplicantIncome[data$Gender == "Male"]
+t_test_male_income <- t.test(male_income, mu = 6000, alternative = "greater")
+
+cat("One-sample t-test Results:\n")
+t_test_male_income
+
+if (t_test_male_income$p.value < 0.05) {
+  cat("Conclusion: Reject the null hypothesis.")
+} else {
+  cat("Conclusion: Fail to reject the null hypothesis.")
+}
+```
+
+#### **Restating the Hypotheses**:
+
+-   Null Hypothesis ($H_0$): The expected income for male applicants is
+    less than or equal to 6000 (μ ≤ 6000).
+-   Alternative Hypothesis ($H_1$): The expected income for male
+    applicants is greater than 6000 (μ \> 6000).
+
+#### **Test Result Summary**:
+
+-   Mean Income of Male Applicants: $5450.589$
+-   $t_{value}$: $−1.8219$
+-   $p_{value}$: $0.9654$
+-   $95$% Confidence Interval : $[4953.397,∞)$
+
+#### **Interpretation**:
+
+Since the $p_{value}$ — $0.9654$ is significantly greater than $0.05$,
+we fail to reject the null hypothesis ($H_0$). This means there is
+insufficient statistical evidence to suggest that the expected income
+for male applicants is greater than $6000$.
+
+The negative $t_{value}$ and the lower bound of the confidence interval
+further confirm that the mean income is likely below the hypothesized
+value.
+
+#### **Conclusion**:
+
+The statistical test shows that the average income of male applicants is
+not greater than 6000. So, we conclude that the data does not provide
+evidence to support the claim that male applicants' expected income
+exceeds the hypothesized threshold.
+
+### Step 2: Hypothesis 2 - `Income vs Loan Approval`
+
+We will use a logistic regression to analyze the relationship between
+`ApplicantIncome` and `Loan_Status`.
+
+The logistic regression equation is expressed as:
+
+$$logit(p)=ln⁡(\frac{p}{1−p})=β_0+β_1*X$$
+
+Where:
+
+-   $p$: Probability of loan approval
+
+-   $ln⁡(\frac{p}{1−p})$: Log odds of the outcome
+
+-   $β_0$: Intercept
+
+-   $β_1$: Coefficient for the predictor variable (X=ApplicantIncome)
+
+The Z-statistic for testing the significance of a predictor is
+calculated as:
+
+$$Z=\frac{\hat{β}}{SE(\hat{β})}$$
+
+Where:
+
+-   $\hat{β}$: Estimated coefficient for the predictor variable.
+
+-   $SE(\hat{β})$: Standard error of the coefficient.
+
+To calculate the **p-value**, use the standard normal distribution (Z)
+
+-   For a two-tailed test (testing if $β_1≠0$):
+
+    $$p=2⋅(1−P(Z≤∣z∣))$$
+
+    Where $P(Z≤∣z∣)$ is derived from the standard normal distribution.
+
+```{r}
+logit_income <- glm(Loan_Status ~ ApplicantIncome, data = data, family = binomial)
+summary(logit_income)
+```
+
+#### **Restating the Hypotheses**:
+
+-   Null Hypothesis ($H_0$): Applicant's income has no effect on the
+    likelihood of loan approval.
+-   Alternative Hypothesis ($H_1$): Higher applicant income increases
+    the likelihood of loan approval.
+
+#### **Test Result Summary**:
+
+-   Coefficient for `ApplicantIncome`: $-1.536 \times 10^{-5}$
+-   $Z_{value}$: $-0.923$
+-   $p_{value}$: $0.356$
+
+#### **Interpretation**:
+
+Since the $p_{value}$ is greater than $0.05$, we fail to reject the null
+hypothesis ($H_0$). This means that there is no statistically
+significant relationship between `ApplicantIncome` and `Loan_Status`.
+
+#### **Conclusion**:
+
+The applicant's income does not appear to be a significant factor in the
+likelihood of loan approval, as the statistical test shows no strong
+association between income and loan approval status.
+
+### Step 3: Hypothesis 3 - `Marital Status vs Loan Approval`
+
+We will use another chi-square test to check the association between
+`Married` and `Loan_Status`.
+
+The test statistic is calculated using the formula:
+
+$$χ^{2}=\sum{\frac{(O_i−E_i)^2}{E_i}}$$
+
+Where:
+
+-   $O_i$: Observed frequency
+
+-   $E_i$ : expected frequency, calculated as:
+
+    $$Ei=\frac{(row_{total})×(column_{total})} {grand_{total}}$$
+
+**Degrees of freedom (df):**
+
+$$df=(rows−1)×(columns−1)$$
+
+To calculate the **p-value**, use the CDF of the Chi-Square
+distribution:
+
+$$p=1−F(χ2;df)$$
+
+Where:
+
+-   $F(χ2;df)$: CDF of the Chi-Square distribution for the calculated
+    χ2-statistic with $df$ degrees of freedom.
+
+```{r}
+marital_status_table <- table(data$Married, data$Loan_Status)
+chi_test_married <- chisq.test(marital_status_table)
+cat("Chi-squared Test Results:\n")
+chi_test_married
+```
+
+#### **Restating the Hypotheses**:
+
+-   Null Hypothesis ($H_0$): Loan approval is independent of the marital
+    status of the applicant.
+-   Alternative Hypothesis ($H_1$): Married applicants are more likely
+    to have their loans approved.
+
+#### **Test Result Summary**:
+
+-   Test statistic ($X^2$): $5.5571$
+-   Degrees of freedom ($df$): $1$
+-   $p_{value}$: $0.01841$
+
+#### **Interpretation**:
+
+Since the $p_{value}$ ($0.01841$) is less than $0.05$, we reject the
+null hypothesis ($H_0$) at a $5%$ significance level. This indicates a
+statistically significant association between Married and Loan_Status.
+
+#### **Conclusion**
+
+Married applicants are **significantly more likely** to have their loans
+approved compared to unmarried applicants. Marital status has a
+meaningful impact on loan approval outcomes.
+
+### Step 4: Kolmogorov-Smirnov Test for Normality of Income
+
+We will use a one-sample Kolmogorov-Smirnov test to check if the
+distribution of `ApplicantIncome` follows a standard normal
+distribution. The test statistic D is defined as:
+
+$$D=sup_{⁡x}∣F_n(x)−F(x)∣$$
+
+Where:
+
+-   $F_n(x)$: Empirical cumulative distribution function (ECDF) of the
+    sample
+
+-   $F(x)$: Cumulative distribution function (CDF) of the theoretical
+    distribution (standard normal)
+
+```{r}
+ks_test_income <- ks.test(data$ApplicantIncome, "pnorm", mean(data$ApplicantIncome), sd(data$ApplicantIncome))
+ks_test_income
+```
+
+#### **Restating the Hypotheses**:
+
+-   Null Hypothesis ($H_0$): The distribution of `ApplicantIncome`
+    follows a standard normal distribution.
+-   Alternative Hypothesis ($H_1$): The distribution of
+    `ApplicantIncome` does not follow a standard normal distribution.
+
+#### **Test Result Summary**:
+
+-   Test statistic ($D$): $0.23738$
+-   $p_{value}$: $< 2.2 \times 10^{-16}$
+
+#### **Interpretation**:
+
+Since the $p_{value}$ ($< 2.2 \times 10^{-16}$) is significantly less
+than $0.05$, we reject the null hypothesis ($H_0$) at a $5%$
+significance level. This suggests that the distribution of
+`ApplicantIncome` does not follow a standard normal distribution.
+
+#### **Conclusion**:
+
+The income of applicants deviates significantly from a standard normal
+distribution.
+
+### Why such tests?
+
+### 1. One-Sample t-Test
+
+The one-sample t-test checks if the average of a sample is different
+from a specific value. Here, we used it to test if the average income of
+male applicants is greater than 6000.
+
+#### Why we use the t-Test?
+
+This test works well for continuous data like income when the
+population's standard deviation is unknown. It helps us see if the
+sample mean is significantly different from the hypothesized mean.
+
+**Key Assumptions**:
+
+-   The data is continuous and roughly normal.\
+-   Observations are independent.\
+-   The population standard deviation is estimated from the sample.
+
+**Can we replace this test?**
+
+The t-test is the best choice for comparing the mean income of male
+applicants to a specific value (6000) because it is designed for
+continuous data and is powerful under normality assumptions. While
+alternatives exist, they are less powerful or unnecessary unless
+assumptions are violated. Hence, this **test does not need to be
+replaced.**
+
+#### 2. Chi-Square Test
+
+The chi-square test is a non-parametric test used to determine if two
+categorical variables are associated. It is well-suited for hypotheses
+such as whether Marital Status or Credit History influences loan
+approval. These variables are categorical, making this test ideal.
+
+**Key Assumptions**:
+
+-   Data is in frequency format (counts).\
+-   Observations are independent.\
+-   By applying this test, we assess the independence of variables like
+    Marital Status and their association with Loan Status.
+
+**Can we replace this test?**
+
+The Chi-Square test is ideal for evaluating associations between
+categorical variables like Marital Status and Loan Status. It handles
+large datasets effectively and is straightforward to apply. Since
+alternatives like Fisher’s Exact Test are better suited for small
+datasets, the Chi-Square test is the best choice here and **does not
+require replacement**.
+
+#### 3. Logistic Regression
+
+Logistic regression is a statistical model used to understand the
+relationship between one or more predictor variables and a binary
+dependent variable. Here, Loan Status is binary (approved or not
+approved), making logistic regression a logical choice for analyzing
+relationships with continuous predictors like Applicant Income.
+
+**Why Logistic Regression**?
+
+-   Predicts probabilities for a binary outcome.
+
+-   Handles continuous and categorical predictors. This test helps
+    evaluate whether higher income or other predictors significantly
+    impact loan approval likelihood.
+
+**Can we replace this test?**
+
+Logistic regression is the standard approach for binary outcomes and can
+handle continuous and categorical predictors effectively. Its
+interpretability and robustness make it ideal for understanding
+predictors' impact on loan approval. No alternative offers a significant
+advantage for this purpose, so it remains the best choice.
+
+#### 4. Kolmogorov-Smirnov (KS) Test
+
+The Kolmogorov-Smirnov test is a non-parametric test used to compare a
+sample distribution with a reference distribution (e.g., normal
+distribution). It was applied to Applicant Income to test whether the
+data follows a standard normal distribution.
+
+**Why Use KS Test**?
+
+-   Suitable for continuous variables
+
+-   Does not assume normality of the sample. This test helps assess the
+    normality assumption of income data, which is important when
+    choosing statistical methods for further analysis.
+
+**Can we replace this test?**
+
+The KS test compares the income data to a reference distribution and is
+effective for larger datasets. While other normality tests may offer
+better sensitivity in specific cases, the KS test is valid and
+sufficient here. Replacing it is unnecessary unless a more sensitive
+test is explicitly required.
+
+## Data Visualization
+
+```{r}
+library(ggplot2)
+library(moments)
+```
+
+### Applicant Income Distribution
+
+```{r}
+income_skewness <- skewness(data$ApplicantIncome)
+income_kurtosis <- kurtosis(data$ApplicantIncome)
+income_mean <- mean(data$ApplicantIncome, na.rm = TRUE)
+
+ggplot(data, aes(x = ApplicantIncome)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "skyblue", color = "black", alpha = 0.7) +
+  geom_density(color = "darkblue", linewidth = 1) +
+  geom_vline(xintercept = income_mean, color = "red", linetype = "dashed", linewidth = 1) +
+  annotate("text", x = income_mean, y = 0.00005, 
+           label = paste0("Mean: ", round(income_mean, 2)), 
+           color = "red", hjust = -0.2) +
+  labs(title = "Distribution of Applicant Income", 
+       x = "Applicant Income", 
+       y = "Density") +
+  annotate("text", x = max(data$ApplicantIncome) * 0.5, y = 0.0002, 
+           label = paste0("Skewness: ", round(income_skewness, 2), 
+                          "\nKurtosis: ", round(income_kurtosis, 2)), 
+           hjust = 0) +
+  theme_minimal()
+```
+
+**Description**: The data exhibits strong positive skewness (6.9), where
+the majority of income values are concentrated in the lower range, while
+a long tail stretches toward higher incomes. The kurtosis value of 76.28
+indicates a sharp peak and heavy tails, suggesting the presence of
+extreme outliers in the income data.
+
+**Conclusions**:
+
+-   The skewness and kurtosis values confirm the non-normality of the
+    income distribution. The Kolmogorov-Smirnov (KS) test likely
+    supports this result by rejecting the null hypothesis that the data
+    follows a normal distribution. This insight is crucial for guiding
+    modeling approaches that assume normality in predictors.
+
+-   The observed high skewness and extreme outliers help uncover
+    potential biases in loan approvals:
+
+    -   Applicants with lower incomes represent the majority, and their
+        approval rates may be disproportionately affected by strict
+        income thresholds or policies.
+
+    -   Outliers with significantly high incomes could be influencing
+        overall statistical measures (e.g., mean income), potentially
+        masking patterns within the core applicant group.
+
+### Loan Amount vs. Loan Status
+
+```{r}
+ggplot(data, aes(x = Loan_Status, y = LoanAmount, fill = Loan_Status)) +
+  geom_boxplot(outlier.color = "red", outlier.size = 3) +
+  scale_fill_manual(values = c("red", "green")) +
+  labs(title = "Loan Amount by Loan Status", x = "Loan Status", y = "Loan Amount") +
+  theme_minimal()
+```
+
+**Description**: The data shows, that both categories (approved and
+denied) show similar interquartile ranges (IQRs), suggesting consistency
+in the middle 50% of loan amounts across statuses. The median loan
+amount is slightly higher for approved loans than denied loans,
+indicating a potential, but not definitive, positive relationship
+between loan amount and approval. Outliers are present in both
+categories, especially for higher loan amounts, which suggests
+variability in decision-making for large loan amounts.
+
+**Conclusions**:
+
+-   The overlapping ranges and comparable IQRs suggest that loan amount
+    alone may not be a decisive factor in approval outcomes. Other
+    factors, such as credit history or applicant income, may play a more
+    significant role in the decision process.
+
+-   The presence of high-value outliers in both categories indicates
+    that larger loans are sometimes approved and sometimes denied,
+    highlighting inconsistencies or the influence of additional
+    criteria.
+
+-   The Kolmogorov-Smirnov (KS) test, if applied, would confirm the
+    non-normality of the loan amount distribution, supporting the need
+    for careful handling of this variable in statistical modeling.
+
+-   Logistic regression could further analyze the relationship between
+    loan amount and approval likelihood, accounting for the influence of
+    outliers and other predictors.
+
+-   A Chi-Square Test could be used to assess whether loan amounts
+    (categorized into ranges) and loan status are independent,
+    particularly focusing on high-value loans to uncover potential
+    patterns.
+
+### Loan Approval Rates by Marital Status
+
+```{r}
+ggplot(data, aes(x = Married, fill = Loan_Status)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c("red", "green")) +
+  labs(title = "Loan Approval Rates by Marital Status", x = "Marital Status", y = "Proportion") +
+  theme_minimal()
+```
+
+**Description**: The data shows, that both married and unmarried
+applicants exhibit similar proportions of loan approvals and denials,
+with approval rates being higher than denial rates in both groups.
+
+**Conclusions**:
+
+-   The distribution of loan approvals and denials indicates that
+    marital status does not appear to have a significant influence on
+    loan approval outcomes. Both groups display nearly identical
+    patterns, suggesting neutrality in decision-making with respect to
+    this variable.
+
+-   A Chi-Square Test could confirm the independence of marital status
+    and loan status, likely rejecting the hypothesis that marital status
+    plays a significant role in approval outcomes.
+
+-   Logistic regression could further validate that marital status does
+    not contribute significantly to predicting loan approval,
+    reinforcing the idea that other factors (e.g., credit history,
+    income) hold more weight in the decision process.
+
+-   Based on this visual, marital status may be deprioritized as a key
+    variable in loan approval models or decision-making frameworks.
+
+### Credit History and Loan Status
+
+```{r}
+ggplot(data, aes(x = Credit_History, fill = Loan_Status)) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c("red", "green")) +
+  labs(title = "Loan Status by Credit History", x = "Credit History", y = "Count") +
+  theme_minimal()
+```
+
+**Description**: The bar chart shows the discrepancy between the two
+groups highlights a strong relationship between credit history and loan
+status. Applicants with a positive credit history (TRUE) overwhelmingly
+receive loan approvals, whereas those without credit history (FALSE) are
+far more likely to be denied. The discrepancy between the two groups
+highlights a strong relationship between credit history and loan status.
+
+**Conclusions**:
+
+-   This visualization strongly suggests that credit history is a
+    decisive factor in loan approvals. Applicants with positive credit
+    histories are significantly more likely to have their loans
+    approved, whereas those without are predominantly denied.
+
+-   A Chi-Square Test can confirm the significant association between
+    credit history and loan status, validating the hypothesis that
+    credit history heavily influences loan decisions.
+
+-   Logistic regression would further quantify the impact of credit
+    history on loan approval likelihood, likely showing it as one of the
+    most predictive variables.
+
+-   Based on this insight, improving credit history could substantially
+    increase approval rates for applicants, making it a key area for
+    financial guidance and support initiatives.
+
+### Joint Distribution of Applicant and Coapplicant Income
+
+```{r}
+ggplot(data, aes(x = ApplicantIncome, y = CoapplicantIncome, color = Loan_Status)) +
+  geom_point(alpha = 0.7) +
+  geom_density_2d() +
+  scale_color_manual(values = c("red", "green")) +
+  labs(title = "Applicant vs. Coapplicant Income by Loan Status", 
+       x = "Applicant Income", y = "Coapplicant Income") +
+  theme_minimal()
+```
+
+**Description**: The majority of data points are concentrated near the
+origin, where either the applicant or coapplicant (or both) have low
+incomes. Coapplicant incomes are often zero, indicating single-income
+applications. Approved loans (green) are densely clustered in the
+lower-income ranges for both applicant and coapplicant incomes, while
+denied loans (red) are more scattered but still primarily within these
+ranges. High applicant incomes are rare, and they appear across both
+approved and denied loans.
+
+**Conclusions**:
+
+-   The visualization suggests that low applicant and coapplicant
+    incomes do not necessarily lead to loan denial, as a significant
+    portion of loans in this range are approved. This indicates other
+    factors, such as credit history, may play a more decisive role.
+
+-   Coapplicant income appears to have a limited influence on loan
+    outcomes, as approvals occur frequently even when coapplicant income
+    is zero.
+
+-   Outliers with high applicant incomes, regardless of loan status,
+    highlight that income alone is not a definitive predictor of
+    approval. Logistic regression could quantify the impact of applicant
+    and coapplicant incomes on approval likelihood.
+
+-   The Chi-Square Test could evaluate whether applicant and coapplicant
+    income categories (e.g., low, medium, high) are significantly
+    associated with loan status, while controlling for other factors.
+
+-   This scatter plot supports the hypothesis that income interacts with
+    other variables (e.g., credit history) to influence loan decisions,
+    rather than serving as an isolated determinant.
+
+## Classifiers
+
+### Set up data for future testing
+
+```{r}
+set.seed(123)
+train_percent <- 50
+sample_index <- sample(1:nrow(data), (train_percent / 100) * nrow(data))
+train_data <- data[sample_index, ]
+test_data <- data[-sample_index, ]
+```
+
+### Presets
+
+```{r}
+library(R6) # Just an up-to-date OOP part of R
+library(hash) # Just for personal preferences of using hashmaps
+library(e1071) # For built-in naive-bayes
+
+# Used for creating so-called bins for values, will be used in custom classifier
+get_ranges_from_zero <- function(column) {
+  column_range <- range(column, na.rm = TRUE)
+  column_range[1] <- 0 # Assure starting from 0
+  
+  breaks <- seq(column_range[1], column_range[2], length.out = 20)
+
+  breaks[length(breaks)] <- Inf # Assure ending with inf.
+  
+  labels <- paste0(
+    "[", head(breaks, -1), ", ", 
+    ifelse(tail(breaks, -1) == Inf, ">= ", ""), tail(breaks, -1), ")"
+  )
+  
+  list(breaks = breaks, labels = labels)
+}
+
+# Vice versa: gets bin for a value
+get_range_for_value <- function(value, ranges) {
+  bin <- findInterval(value, ranges$breaks, rightmost.closed = TRUE)
+  range_label <- ranges$labels[bin]
+  return(range_label)
+}
+
+```
+
+### Custom Classifier
+
+#### Classifier build
+
+```{r}
+NaiveBayes <- R6Class(
+  "NaiveBayes",
+  public = list(
+    df_priors = NULL, # Stores prior probabilities for each class
+    hash_likelihoods = NULL, # Hashmap for likelihoods of feature values given class
+    hash_bins = NULL, # Hashmap for bins of continuous variables
+    
+    classes = c(FALSE, TRUE),
+    
+    # Used to train model
+    fit = function(train_data, target_column) {
+      # Extract the target variable and features
+      target <- train_data[[target_column]]
+      features <- train_data[, setdiff(names(train_data), target_column)]
+      
+      # Calculate prior probabilities for each class
+      self$df_priors <- data.frame(True = sum(target == TRUE) / length(target),
+                                   False = sum(target == FALSE) / length(target))
+      
+      self$hash_likelihoods <- hash()
+    
+      # Loop through each feature to calculate likelihoods
+      for (feature in names(features)) {
+        feature_values <- features[[feature]]
+        # Handling continuous features
+        if (is.numeric(feature_values) & feature != "Loan_Amount_Term") {
+          # Determine bin ranges for continuous features
+          bin_info <- get_ranges_from_zero(feature_values)
+          self$hash_bins[[feature]] <- bin_info
+          
+          # Bin it
+          binned_values <- cut(
+            feature_values,
+            breaks = bin_info$breaks,
+            labels = bin_info$labels,
+            include.lowest = TRUE,
+            right = FALSE
+          )
+          
+          likelihoods <- data.frame(Bin = character(0),
+                                    Class = logical(0),
+                                    Count = integer(0),
+                                    Likelihood = numeric(0))
+          
+          # Calculate likelihoods for each class
+          for (class in self$classes) {
+            likelihood_data <- as.data.frame(table(binned_values, target == class))
+            colnames(likelihood_data) <- c("Bin", "Class", "Count")
+            likelihood_data$Likelihood <- likelihood_data$Count / sum(likelihood_data$Count)
+            
+            # Append likelihood data for this feature and class
+            likelihoods <- rbind(likelihoods, likelihood_data)
+          }
+          
+          self$hash_likelihoods[[feature]] <- likelihoods
+          
+        } else { # Handling discrete features
+          likelihoods <- data.frame(Value = character(0),
+                                    Class = logical(0),
+                                    Count = integer(0),
+                                    Likelihood = numeric(0))
+          
+          # Again, calculate likelihoods for each class
+          for (class in self$classes) {
+            likelihood_data <- as.data.frame(table(feature_values, target == class))
+            colnames(likelihood_data) <- c("Value", "Class", "Count")
+            likelihood_data$Likelihood <- likelihood_data$Count / sum(likelihood_data$Count)
+            
+            likelihoods <- rbind(likelihoods, likelihood_data)
+          }
+          
+          # Store the likelihoods in the hashmap
+          self$hash_likelihoods[[feature]] <- likelihoods
+        }
+      }
+    },
+    
+    # Predict the result for one value
+    predict = function(new_data) {
+      if (is.null(self$df_priors)) {
+        stop("Model has not been trained yet. Please call fit() first.")
+      }
+      
+      # Start with the prior probabilities as the initial posteriors
+      posteriors <- self$df_priors
+
+      for (feature in names(new_data)) {
+        feature_value <- new_data[[feature]]
+
+        # Handle continuous features
+        if (is.numeric(feature_value) & feature != "Loan_Amount_Term") {
+          
+          # Get the bin range for the feature value
+          bin_info <- self$hash_bins[[feature]]
+          binned_value <- get_range_for_value(feature_value, bin_info)
+          likelihood_data <- self$hash_likelihoods[[feature]]
+          
+          # Try to retrieve likelihood for the current bin and class, fall back to a small value if not found
+          likelihood_false <- tryCatch(
+            {
+              likelihood_data$Likelihood[likelihood_data$Bin == binned_value & likelihood_data$Class == FALSE]
+            },
+            error = function(e) {
+              1e-4 # Default small likelihood for unseen values
+            }
+          )
+          # Same here
+          likelihood_true <- tryCatch(
+            {
+              likelihood_data$Likelihood[likelihood_data$Bin == binned_value & likelihood_data$Class == TRUE]
+            },
+            error = function(e) {
+              1e-4 # Default small likelihood for unseen values
+            }
+          )
+          
+        } else { # Handle discrete features
+          likelihood_data <- self$hash_likelihoods[[feature]]
+          
+          # Retrieve likelihoods for the current value and class
+          likelihood_true <- likelihood_data$Likelihood[likelihood_data$Value == feature_value & likelihood_data$Class == TRUE]
+          likelihood_false <- likelihood_data$Likelihood[likelihood_data$Value == feature_value & likelihood_data$Class == FALSE]
+        }
+        
+        # Ensuring probabilities are non-zero
+        if (length(likelihood_true) == 0) {
+          likelihood_true <- 1e-4
+        }
+        if (length(likelihood_false) == 0) {
+          likelihood_false <- 1e-4
+        }
+        
+        # Update posterior probabilities by multiplying with feature likelihoods
+        posteriors$Posterior[posteriors$Class == TRUE] <- posteriors$Posterior[posteriors$Class == TRUE] * likelihood_true
+        posteriors$Posterior[posteriors$Class == FALSE] <- posteriors$Posterior[posteriors$Class == FALSE] * likelihood_false
+      }
+
+      # Determine the class with the highest posterior probability
+      column = names(posteriors[1,])[which.max(posteriors[1,][1, ])]
+      return(if (column == "True") TRUE else FALSE)
+    },
+    
+    # Test the trained model on some data
+    test = function(test_data, target_column) {
+      target <- test_data[[target_column]]
+      features <- test_data[, setdiff(names(test_data), target_column), drop = FALSE]
+      
+      predictions <- sapply(1:nrow(features), function(i) {
+        new_data <- features[i, , drop = FALSE]
+        pred <- self$predict(new_data)
+        return(pred)
+      })
+      accuracy <- mean(predictions == target)
+      cat("Accuracy:", round(accuracy * 100, 2), "%\n")
+    }
+  )
+)
+```
+
+#### Train Classifier
+
+```{r}
+set.seed(123)
+nb_classifier <- NaiveBayes$new()
+nb_classifier$fit(train_data, target_column = "Loan_Status")
+```
+
+#### Test Classifier Accuracy
+
+```{r}
+nb_classifier$test(train_data, "Loan_Status")
+```
+
+### Built-in Classifier
+
+#### Train classifier
+
+```{r}
+model <- naiveBayes(Loan_Status ~ ., data = train_data)
+```
+
+#### Test classifier
+
+```{r}
+predictions <- predict(model, test_data)
+confusion_matrix <- table(test_data$Loan_Status, predictions)
+
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+
+cat("Accuracy:", round(accuracy * 100, 2), "%\n")
+```
+
+### Why Such Results?
+
+Of course there maybe a lot of different causes of such results, but we
+can highlight some of the most probable of them. We got $71.67$% for our
+custom classifier and $80.42$% for the built-in one. It can be result,
+for instance, of some problems with `binning`. If those `bin`-s aren’t
+set just right, they might miss important patterns.
+
+On the other hand, our built-in classifier does not have `binning`
+feature, it works with continuous variables directly. Also it uses
+techniques like Laplace smoothing, which fixes issues like zero
+probabilities and small data points.
+
+But even taking into account these factors it provides us with only
+$80.42$% accuracy. This can possibly be result of our data
+preprocessing, where we cleared some not full data. Also it can be
+result of our training data imbalance ($70$% vs. $30$%, and it is only
+for loan status). Another possible reason is that it assumes all
+features are independent, but in reality, that’s rarely true and it may
+probably hurt performance.
+
+Nonetheless, `v2` (built-in one) still provides us with some not bad
+predictions, so based on this analysis, we recommend using the built-in
+model for future predictions, as it delivers better performance and
+reliability.
